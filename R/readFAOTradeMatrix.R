@@ -87,10 +87,16 @@ readFAOTradeMatrix <- function(subtype) { # nolint
   elementShort <- elementShort[elementShort$ElementCode %in% fao$ElementCode, ]
 
   # make ElementShort a combination of Element and Unit, replace special characters, and replace multiple _ by one
-  tmpElement <- gsub("[\\.,;?\\+& \\/\\-]", "_", fao$Element, perl = TRUE)
-  tmpUnit    <- gsub("[\\.,;\\+& \\-]", "_",    fao$Unit, perl = TRUE)
-  tmpElementShort <- paste0(tmpElement, "_(", tmpUnit, ")")
-  fao$ElementShort <- gsub("_{1,}", "_", tmpElementShort, perl = TRUE) # nolint
+  # Element/Unit have very few distinct values relative to the number of rows, so build the transform on the
+  # unique (Element, Unit) pairs and map back instead of running the regexes on every row
+  euPairs <- unique(fao[c("Element", "Unit")])
+  tmpElement <- gsub("[\\.,;?\\+& \\/\\-]", "_", euPairs$Element, perl = TRUE)
+  tmpUnit    <- gsub("[\\.,;\\+& \\-]", "_", euPairs$Unit, perl = TRUE)
+  euPairs$ElementShort <- gsub("_{1,}", "_", paste0(tmpElement, "_(", tmpUnit, ")"), perl = TRUE) # nolint
+  fao$ElementShort <- euPairs$ElementShort[
+    match(paste(fao$Element, fao$Unit, sep = "\r"),
+          paste(euPairs$Element, euPairs$Unit, sep = "\r"))
+  ]
 
   # replace Units if tonnes exist with "t" in updated mapping
   if ("tonnes" %in% elementShort$Unit) {
@@ -98,17 +104,27 @@ readFAOTradeMatrix <- function(subtype) { # nolint
   }
 
   ### replace ElementShort with the entries from ElementShort if the Unit is the same
-  if (length(elementShort) > 0) {
-    for (i in seq_len(nrow(elementShort))) {
-      j <- (fao$ElementCode == elementShort[i, "ElementCode"] & fao$Unit == elementShort[i, "Unit"])
-      fao$ElementShort[j] <- as.character(elementShort[i, "ElementShort"])
-    }
+  if (nrow(elementShort) > 0) {
+    # vectorised equivalent of the per-row loop: match on (ElementCode, Unit).
+    # rev() preserves the original "last matching row wins" behaviour of the loop.
+    ord <- rev(seq_len(nrow(elementShort)))
+    esKey <- paste(elementShort$ElementCode[ord], elementShort$Unit[ord], sep = "\r")
+    esVal <- as.character(elementShort$ElementShort)[ord]
+    idx <- match(paste(fao$ElementCode, fao$Unit, sep = "\r"), esKey)
+    matched <- !is.na(idx)
+    fao$ElementShort[matched] <- esVal[idx[matched]]
   }
 
   # remove accent in Mate to avoid problems and remove other strange names
-  fao$Item <- gsub("\u00E9", "e", fao$Item, perl = TRUE)
-  fao$Item <- gsub("\n + (Total)", " + (Total)", fao$Item, fixed = TRUE)
-  fao$ItemCodeItem <- paste0(fao$ItemCode, "|", gsub("\\.", "", fao$Item, perl = TRUE))
+  # Item has few distinct values relative to the number of rows: transform the unique items and
+  # map back, instead of running the regexes on every row
+  uItem <- unique(fao$Item)
+  tItem <- gsub("\u00E9", "e", uItem, perl = TRUE)
+  tItem <- gsub("\n + (Total)", " + (Total)", tItem, fixed = TRUE)
+  tItemNoDot <- gsub("\\.", "", tItem, perl = TRUE)
+  itemPos <- match(fao$Item, uItem)
+  fao$Item <- tItem[itemPos]
+  fao$ItemCodeItem <- paste0(fao$ItemCode, "|", tItemNoDot[itemPos])
 
   # some small islands correspond to the same ISO3code, just remove them for now
   fao <- filter(fao, !.data$ReporterCountries %in% c("Johnston Island", "Midway Island",

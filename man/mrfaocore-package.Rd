@@ -20,6 +20,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item David Chen \email{david.chen@pik-potsdam.de}
   \item Ulrich Kreidenweis
   \item Abhijeet Mishra
   \item Kristine Karstens

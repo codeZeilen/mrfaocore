@@ -495,7 +495,6 @@ calcFAOmassbalance_pre <- function(version = "join2010", years = NULL) { # nolin
                   paste(unique(unname(where(relValues < -threshold)[[1]]$individual[, 3])), collapse = ", "))
         }
       }
-      gc()
       return(object)
     }
 
@@ -1754,7 +1753,6 @@ calcFAOmassbalance_pre <- function(version = "join2010", years = NULL) { # nolin
       }
       object[, , list(goodsIn, from)] <- 0  # if from == process it is "intermediate" which is to be cleared as well
 
-      gc()
       return(object)
     }
 
