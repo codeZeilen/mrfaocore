@@ -19,13 +19,17 @@
 
 convertFAOTradeMatrix <- function(x, subtype) { # nolint
 
-  gc()
   # ---- Section for country specific treatment ----
-  # make a set name for dim 1.2
-  getSets(x)[1] <- "ISO.Partner"
+  # make a set name for dim 1.2. The two sub dimension names have to be set individually: assigning
+  # "ISO.Partner" to the first entry alone appends a third, non-existing spatial set to the object,
+  # which later makes toolConvertGDP fail on the set count.
+  getSets(x)[1:2] <- c("ISO", "Partner")
 
   ## data for Eritrea ERI and South Sudan SSD added with 0 if not existing after the split
   ## to make toolISOhistorical work
+  ## Everything below matches cells by name, and the object is sorted once at the very end, so the
+  ## added cells are bound in a single mbind per block and the intermediate magpiesort is skipped:
+  ## each of those sorts is a full permutation copy of the (multi GB) object.
   if (any(getItems(x, dim = 1.1) == "XET") && any(getItems(x, dim = 1.1) == "ETH") &&
         !any(getItems(x, dim = 1.1) == "ERI")) {
     xERI <- x[list("ISO" = c("ETH")), , ]
@@ -34,19 +38,17 @@ convertFAOTradeMatrix <- function(x, subtype) { # nolint
     missingC <- paste0("ERI.",
                        setdiff(getItems(x, dim = 1.2), getItems(xERI, dim = 1.2)))
     fillC <- new.magpie(cells_and_regions = missingC, years = getYears(x), names = getNames(x), fill = 0)
-    xERI <- mbind(xERI, fillC)
-    x <- magpiesort(mbind(x, xERI))
+    x <- mbind(x, xERI, fillC)
   }
   if (any(getItems(x, dim = 1.2) == "XET") && any(getItems(x, dim = 1.2) == "ETH") &&
         !any(getItems(x, dim = 1.2) == "ERI")) {
     xERI <- x[list("Partner" = c("ETH")), , ]
     xERI[, , ] <- 0
     getItems(xERI, dim = 1.2) <- "ERI"
-    missingC <- paste0(".ERI",
-                       setdiff(getItems(x, dim = 1.1), getItems(xERI, dim = 1.1)))
+    missingC <- paste0(setdiff(getItems(x, dim = 1.1), getItems(xERI, dim = 1.1)),
+                       ".ERI")
     fillC <- new.magpie(cells_and_regions = missingC, years = getYears(x), names = getNames(x), fill = 0)
-    xERI <- mbind(xERI, fillC)
-    x <- magpiesort(mbind(x, xERI))
+    x <- mbind(x, xERI, fillC)
   }
 
   if (any(getItems(x, dim = 1.1) == "XSD") && any(getItems(x, dim = 1.1) == "SDN") &&
@@ -56,8 +58,8 @@ convertFAOTradeMatrix <- function(x, subtype) { # nolint
     getItems(xSSD, dim = 1.1) <- "SSD"
     missingC <- paste0("SSD.",
                        setdiff(getItems(x, dim = 1.2), getItems(xSSD, dim = 1.2)))
-    xSSD <- mbind(xSSD, fillC)
-    x <- magpiesort(mbind(x, xSSD))
+    fillC <- new.magpie(cells_and_regions = missingC, years = getYears(x), names = getNames(x), fill = 0)
+    x <- mbind(x, xSSD, fillC)
   }
 
   if (any(getItems(x, dim = 1.2) == "XSD") && any(getItems(x, dim = 1.2) == "SDN") &&
@@ -65,10 +67,10 @@ convertFAOTradeMatrix <- function(x, subtype) { # nolint
     xSSD <- x[list("Partner" = c("SDN")), , ]
     xSSD[, , ] <- 0
     getItems(xSSD, dim = 1.2) <- "SSD"
-    missingC <- paste0(".SSD",
-                       setdiff(getItems(x, dim = 1.1), getItems(xSSD, dim = 1.1)))
-    xSSD <- mbind(xSSD, fillC)
-    x <- magpiesort(mbind(x, xSSD))
+    missingC <- paste0(setdiff(getItems(x, dim = 1.1), getItems(xSSD, dim = 1.1)),
+                       ".SSD")
+    fillC <- new.magpie(cells_and_regions = missingC, years = getYears(x), names = getNames(x), fill = 0)
+    x <- mbind(x, xSSD, fillC)
   }
 
   ## add additional mappings
@@ -173,9 +175,18 @@ convertFAOTradeMatrix <- function(x, subtype) { # nolint
   # currency convert values
   if (subtype %in% c("import_value_kcr", "import_value_kli", "import_value_kothers", "import_value_kforestry",
                      "export_value_kcr", "export_value_kli", "export_value_kothers", "export_value_kforestry")) {
-    out <- toolConvertGDP(out, unit_in = "current US$MER",
-                          unit_out = "constant 2017 US$MER",
-                          replace_NAs = "no_conversion")
+    # toolConvertGDP melts its input into a long data frame with one row per reporter x partner x
+    # year x item, which is prohibitive for a bilateral object. The conversion factor only depends
+    # on the reporter country and the year, so it is derived on a small object per reporter and
+    # then multiplied in, which magpie expands over the partner and item dimensions via the ISO set.
+    cf <- new.magpie(getItems(out, dim = 1.1), getYears(out), fill = 1)
+    getSets(cf)[1] <- "ISO"
+    cf <- toolConvertGDP(cf, unit_in = "current US$MER",
+                         unit_out = "constant 2017 US$MER",
+                         replace_NAs = "no_conversion")
+    # "no_conversion" leaves countries without a conversion factor unscaled, i.e. at a factor of 1
+    cf[is.na(cf)] <- 1
+    out <- out * collapseDim(cf, dim = 3)
   }
 
   out <- magpiesort(out)
