@@ -92,9 +92,15 @@ readFAOTradeMatrix <- function(subtype) { # nolint
   tmpElementShort <- paste0(tmpElement, "_(", tmpUnit, ")")
   fao$ElementShort <- gsub("_{1,}", "_", tmpElementShort, perl = TRUE) # nolint
 
-  # replace Units if tonnes exist with "t" in updated mapping
-  if ("tonnes" %in% elementShort$Unit) {
-    elementShort$Unit[(elementShort$Unit == "tonnes")] <- "t"
+  # FAO renamed units between data releases ("tonnes" -> "t", "1000 US$" -> "1000 USD").
+  # Only rename when the file at hand actually uses the new spelling, so older downloads keep working.
+  unitsPresent <- unique(fao$Unit)
+  unitRenames <- c("tonnes" = "t", "1000 US$" = "1000 USD")
+  for (oldUnit in names(unitRenames)) {
+    newUnit <- unitRenames[[oldUnit]]
+    if (oldUnit %in% elementShort$Unit && !(oldUnit %in% unitsPresent) && newUnit %in% unitsPresent) {
+      elementShort$Unit[elementShort$Unit == oldUnit] <- newUnit
+    }
   }
 
   ### replace ElementShort with the entries from ElementShort if the Unit is the same
@@ -165,9 +171,9 @@ readFAOTradeMatrix <- function(subtype) { # nolint
   } else {
 
     elements <- list(
-      import_value_kforestry = list(trade = "Import_Value_(1000_USD)"),
+      import_value_kforestry = list(trade = "import_kUS$"),
       import_qty_kforestry = list(trade = c("import", "import_m3")),
-      export_value_kforestry = list(trade = "Export_Value_(1000_USD)"),
+      export_value_kforestry = list(trade = "export_kUS$"),
       export_qty_kforestry = list(trade = c("export", "export_m3"))
     )
 
