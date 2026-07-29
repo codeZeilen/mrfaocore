@@ -20,10 +20,8 @@
 convertFAOTradeMatrix <- function(x, subtype) { # nolint
 
   # ---- Section for country specific treatment ----
-  # make a set name for dim 1.2. The two sub dimension names have to be set individually: assigning
-  # "ISO.Partner" to the first entry alone appends a third, non-existing spatial set to the object,
-  # which later makes toolConvertGDP fail on the set count.
-  getSets(x)[1:2] <- c("ISO", "Partner")
+  # make a set name for dim 1.2
+  getSets(x, fulldim = FALSE)[1] <- "ISO.Partner"
 
   ## data for Eritrea ERI and South Sudan SSD added with 0 if not existing after the split
   ## to make toolISOhistorical work
@@ -176,9 +174,8 @@ convertFAOTradeMatrix <- function(x, subtype) { # nolint
   if (subtype %in% c("import_value_kcr", "import_value_kli", "import_value_kothers", "import_value_kforestry",
                      "export_value_kcr", "export_value_kli", "export_value_kothers", "export_value_kforestry")) {
     # toolConvertGDP melts its input into a long data frame with one row per reporter x partner x
-    # year x item, which is prohibitive for a bilateral object. The conversion factor only depends
-    # on the reporter country and the year, so it is derived on a small object per reporter and
-    # then multiplied in, which magpie expands over the partner and item dimensions via the ISO set.
+    # year x item, which is expensice for a bilateral object. Only get the per country factor and 
+    # apply it.
     cf <- new.magpie(getItems(out, dim = 1.1), getYears(out), fill = 1)
     getSets(cf)[1] <- "ISO"
     cf <- toolConvertGDP(cf, unit_in = "current US$MER",
