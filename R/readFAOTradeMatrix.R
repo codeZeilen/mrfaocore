@@ -123,17 +123,23 @@ readFAOTradeMatrix <- function(subtype) { # nolint
   # keep relevant rows only
   elementShort <- elementShort[elementShort$ElementCode %in% levels(fao$ElementCode), ]
 
-  # replace Units if tonnes exist with "t" in updated mapping
-  if ("tonnes" %in% elementShort$Unit) {
-    elementShort$Unit[(elementShort$Unit == "tonnes")] <- "t"
+  unitLv <- levels(fao$Unit)
+  elemLv <- levels(fao$Element)
+  codeLv <- levels(fao$ElementCode)
+
+  # FAO renamed units between data releases ("tonnes" -> "t", "1000 US$" -> "1000 USD").
+  # Only rename when the file at hand actually uses the new spelling, so older downloads keep working.
+  unitRenames <- c("tonnes" = "t", "1000 US$" = "1000 USD")
+  for (oldUnit in names(unitRenames)) {
+    newUnit <- unitRenames[[oldUnit]]
+    if (oldUnit %in% elementShort$Unit && !(oldUnit %in% unitLv) && newUnit %in% unitLv) {
+      elementShort$Unit[elementShort$Unit == oldUnit] <- newUnit
+    }
   }
 
   # ElementShort is a pure function of (ElementCode, Element, Unit), which together take only a few dozen
   # distinct values. Build the lookup once over the grid of factor levels and address it per row with an
   # integer index, so no full-length character vector is ever constructed.
-  unitLv <- levels(fao$Unit)
-  elemLv <- levels(fao$Element)
-  codeLv <- levels(fao$ElementCode)
   grid <- expand.grid(unit = unitLv, element = elemLv, code = codeLv,
                       KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE)
 
@@ -159,6 +165,11 @@ readFAOTradeMatrix <- function(subtype) { # nolint
 
   keep <- (gridShort %in% element$trade)[gridIndex]
   keep[is.na(keep)] <- FALSE
+  if (!any(keep)) {
+    stop("No rows left after selecting element(s) ", paste(element$trade, collapse = ", "),
+         " for subtype ", subtype, ". Elements available in ", file, ": ",
+         paste(sort(unique(gridShort)), collapse = ", "))
+  }
   fao <- fao[keep, , drop = FALSE]
   fao$ElementShort <- gridShort[gridIndex[keep]]
 
