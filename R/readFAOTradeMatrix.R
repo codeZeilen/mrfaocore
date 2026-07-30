@@ -20,6 +20,7 @@
 #' @importFrom tidyr pivot_longer starts_with unite
 #' @importFrom dplyr summarise filter group_by ungroup %>% distinct inner_join
 #' @importFrom magpiesets findset
+#' @importFrom data.table :=
 
 readFAOTradeMatrix <- function(subtype) { # nolint
 
@@ -158,6 +159,7 @@ readFAOTradeMatrix <- function(subtype) { # nolint
     stop("No data found for element(s) ", paste(element$trade, collapse = ", "), " in ", file,
          ". Available elements: ", paste(available, collapse = ", "))
   }
+  ElementShort <- i.ElementShort <- NULL # nolint Due to non-standard evaluation in the next line.
   fao[combos, ElementShort := i.ElementShort, on = c("ElementCode", "Element", "Unit")] # nolint
   fao <- fao[!is.na(fao$ElementShort), ]
   data.table::setDF(fao)
