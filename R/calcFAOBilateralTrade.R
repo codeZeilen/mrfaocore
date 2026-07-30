@@ -136,12 +136,6 @@ calcFAOBilateralTrade <- function(output = "value", products = "kcr", prodAgg = 
     unit <- "US$17/tDM"
   }
 
-  if (output %in% c("value", "price")) {
-    out <- GDPuc::convertGDP(out, unit_in = "current US$MER",
-                             unit_out = "constant 2017 US$MER",
-                             replace_NAs = "with_USA")
-  }
-
   if (prodAgg) {
     # aggregate to get a preliminary cif/fob ratio
     out[is.na(out)] <- 0
